@@ -1,6 +1,30 @@
 
 THE YieldTrinityDicoverer Solidity Contract
-This is a contract for a price oracle that retrieves the price of tokens using the Uniswap decentralized exchange. It has several functions that allow you to retrieve the price of a token in terms of WETH or USDT, get the last price of a token pair, and check if a token pair has liquidity.
+This is a contract for a price oracle that retrieves the price of tokens using the Uniswap decentralized exchange. 
+It has several functions that allow you to retrieve the price of a token in terms of WETH or USDT, get the last price of a token pair, and check if a token pair has liquidity.
+
+THE YieldTrinityDicoverer INTERFACE
+====================================
+interface IYieldTrinityDicoverer {
+    function getLastPrice(address _token1, address _token2) external view returns (uint256 lastRate);
+    function getTokenPriceInWETH(address _token) external view returns (uint256 priceInWETH);
+    function getTokenPriceInUSDT(address _token) external view returns (uint256 priceInUSDT);
+    function getLastPair() external view returns (address pair);
+    function hasLiquidity(address _token1, address _token2) external view returns (bool hasliquidity);
+    function getTokensLiquidity(address _token1, address _token2) external view returns (uint256 token1, uint256 token2);
+    function getTokenFromPair(address pair) external view returns (address tokenAddress, bool isValid);
+    function getTokenInfo(address _token) external view returns (TokenInfo memory);
+    function getPairAddress(address token1, address token2) external view returns (address);
+    function getTokenPairReserves(address pairAddress) external view returns (uint256 token0Reserve, uint256 reserve1Reserve);
+}
+
+struct TokenInfo {
+    string name;
+    string symbol;
+    uint256 decimals;
+    uint256 totalSupply;
+}
+====================================
 
 The contract imports the SafeMath library from OpenZeppelin and several interfaces from the Uniswap contracts, including IUniswapV2Router02, IUniswapV2Pair, IUniswapV2Factory, and IERC20.
 

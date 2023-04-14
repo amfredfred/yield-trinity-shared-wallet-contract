@@ -9,7 +9,7 @@ interface IERC20 {
         uint256 _value
     ) external returns (bool success);
 }
- 
+
 contract YieldTrinitySharedWallet {
     address payable public owner;
     uint256 public totalFunds;
@@ -25,9 +25,8 @@ contract YieldTrinitySharedWallet {
     mapping(address => uint256) public potentialEarn;
     mapping(address => uint256) public dilutedEarning;
     mapping(address => uint256) public conspectus;
-    
 
-    uint [] public  epochHistory;
+    uint[] public epochHistory;
     uint256 public withdrawalFee = 3;
 
     event Deposit(address indexed user, uint256 amount);
@@ -81,9 +80,9 @@ contract YieldTrinitySharedWallet {
         require(amount <= conspectus[msg.sender], "Insufficient balance.");
         require(amount <= totalFunds, "Insufficient funds in the contract.");
         uint256 fee = (amount * withdrawalFee) / 10000;
-        if(amount>contribute[msg.sender]){
-          contribute[msg.sender] = 0;  
-        }else {
+        if (amount > contribute[msg.sender]) {
+            contribute[msg.sender] = 0;
+        } else {
             contribute[msg.sender];
         }
         conspectus[msg.sender] -= amount;
@@ -127,14 +126,18 @@ contract YieldTrinitySharedWallet {
         for (uint i = 0; i < usersBeforeBorrow.length; i++) {
             address acc = usersBeforeBorrow[i];
             uint256 pte = potentialEarn[acc];
-            if(remainingFunds>0){
-                uint256 share = (pte * remainingFunds ) / 100 ;
+            if (remainingFunds > 0) {
+                uint256 share = (pte * remainingFunds) / 100;
                 dilutedEarning[usersBeforeBorrow[i]] += share;
                 conspectus[usersBeforeBorrow[i]] = 0;
-                conspectus[usersBeforeBorrow[i]] += dilutedEarning[usersBeforeBorrow[i]];
-                conspectus[usersBeforeBorrow[i]] += contribute[usersBeforeBorrow[i]];
+                conspectus[usersBeforeBorrow[i]] += dilutedEarning[
+                    usersBeforeBorrow[i]
+                ];
+                conspectus[usersBeforeBorrow[i]] += contribute[
+                    usersBeforeBorrow[i]
+                ];
             }
-         }
+        }
         epochHistory.push(block.timestamp);
         repaidAmounts[msg.sender] = amount;
         emit Repay(msg.sender, amount);
@@ -202,30 +205,8 @@ contract YieldTrinitySharedWallet {
         withdrawalFee = fee;
     }
 
-    function whitelist(address account) public onlyOwner {
-        whitelistedUsers[account] = true;
-    }
-
-    function deWhitelist(address account) public onlyOwner {
-        whitelistedUsers[account] = false;
-    }
-
-    function borrow(
-        uint256 amount,
-        address[] calldata recipients
-    ) public onlyOwner {
-        require(amount > 0, "You must borrow more than 0.");
-        require(amount <= totalFunds, "Insufficient funds in the contract.");
-        for (uint256 i = 0; i < recipients.length; i++) {
-            require(recipients[i] != address(0), "Invalid address.");
-            require(
-                !bannedUsers[recipients[i]],
-                "Recipient has been banned from using this contract."
-            );
-            payable(recipients[i]).transfer((amount / recipients.length));
-        }
-        totalFunds -= amount;
-        sysncq();
+    function toggleWhiteList(address account) public onlyOwner {
+        whitelistedUsers[account] = !whitelistedUsers[account];
     }
 
     receive() external payable {
