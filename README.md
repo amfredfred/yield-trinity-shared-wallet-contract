@@ -4,44 +4,50 @@ This is a contract for a price oracle that retrieves the price of tokens using t
 It has several functions that allow you to retrieve the price of a token in terms of WETH or USDT, get the last price of a token pair, and check if a token pair has liquidity.
 
 THE YieldTrinityDicoverer INTERFACE
-====================================
+==================================== 
+pragma solidity >=0.6.0 <0.9.0;
 interface IYieldTrinityDicoverer {
-    function getLastPrice(address _token1, address _token2) external view returns (uint256 lastRate);
-    function getTokenPriceInWETH(address _token) external view returns (uint256 priceInWETH);
-    function getTokenPriceInUSDT(address _token) external view returns (uint256 priceInUSDT);
-    function getLastPair() external view returns (address pair);
-    function hasLiquidity(address _token1, address _token2) external view returns (bool hasliquidity);
-    function getTokensLiquidity(address _token1, address _token2) external view returns (uint256 token1, uint256 token2);
-    function getTokenFromPair(address pair) external view returns (address tokenAddress, bool isValid);
+    struct TokenInfo {
+        string name;
+        string symbol;
+        uint256 decimals;
+        uint256 totalSupply;
+    }
+
+    function getCurrentQuoteByInput(address _token1, address _token2, uint256 _amount) external view returns (uint256);
+    function getCurrentQuote(address _token1, address _token2) external view returns (uint256);
+    function getLastPrice(address _token1, address _token2) external view returns (uint256);
+    function getTokenPriceInWETH(address _token) external view returns (uint256);
+    function getTokenPriceInUSDT(address _token) external view returns (uint256);
+    function getLastPair() external view returns (address); 
+    function hasLiquidity(address _token1, address _token2) external view returns (bool);
+    function getTokensLiquidity(address _token1, address _token2) external view returns (uint256, uint256);
+    function getTokenFromPair(address pair) external view returns (address, bool);
     function getTokenInfo(address _token) external view returns (TokenInfo memory);
     function getPairAddress(address token1, address token2) external view returns (address);
-    function getTokenPairReserves(address pairAddress) external view returns (uint256 token0Reserve, uint256 reserve1Reserve);
-}
-
-struct TokenInfo {
-    string name;
-    string symbol;
-    uint256 decimals;
-    uint256 totalSupply;
 }
 ====================================
 
-The contract imports the SafeMath library from OpenZeppelin and several interfaces from the Uniswap contracts, including IUniswapV2Router02, IUniswapV2Pair, IUniswapV2Factory, and IERC20.
+constructor: The contract constructor takes three arguments - the address of the UniswapV2Factory contract, the address of the UniswapV2Router02 contract, and the address of the USDT token. These addresses are used to set the uniswapFactory, uniswapRouter, and usdtAddress variables.
 
-The PriceOracle contract constructor takes three parameters: the address of the Uniswap factory contract, the address of the Uniswap router contract, and the address of the USDT token contract.
+getCurrentQuoteByInput: This function takes in the addresses of two tokens and an amount of the first token, and returns the current price of the second token in terms of the first token.
 
-The getLastPrice function takes two parameters: the addresses of two tokens and returns the last price of the token pair. If the pair does not have liquidity, the function returns 0.
+getCurrentQuote: This function takes in the addresses of two tokens and returns the current price of the second token in terms of the first token, using a default input amount of 10 to the power of the first token's decimals.
 
-The getTokenPriceInWETH function takes the address of a token and returns the price of the token in terms of WETH. If the pair does not have liquidity, the function returns 0.
+getLastPrice: This function takes in the addresses of two tokens and returns the last known price of the second token in terms of the first token, as obtained from the UniswapV2Router02 contract.
 
-The getTokenPriceInUSDT function takes the address of a token and returns the price of the token in terms of USDT. It first retrieves the price of WETH in USDT and then multiplies the price of the token in WETH by the price of WETH in USDT. If the pair does not have liquidity, the function returns 0.
+getTokenPriceInWETH: This function takes in the address of a token and returns its current price in terms of Wrapped Ether (WETH).
 
-The getTokenDecimals function takes the address of a token and returns the number of decimals for the token.
+getTokenPriceInUSDT: This function takes in the address of a token and returns its current price in terms of USDT.
 
-The getLastPair function returns the address of the last pair created in the Uniswap factory.
+getLastPair: This function returns the address of the last UniswapV2Pair contract created by the UniswapV2Factory contract.
 
-The hasLiquidity function takes the addresses of two tokens and returns whether the pair has liquidity.
+hasLiquidity: This function takes in the addresses of two tokens and returns a boolean value indicating whether or not there is liquidity available for trading between the two tokens.
 
-The getTokensLiquidity function takes the addresses of two tokens and returns the amount of liquidity for each token in the pair.
+getTokensLiquidity: This function takes in the addresses of two tokens and returns the amount of each token that is currently locked in a liquidity pool for trading with the other token.
 
-The getTokenFromPair function takes the address of a pair and returns the address of the token that is not WETH and a boolean indicating whether the pair is valid.
+getTokenFromPair: This function takes in the address of a UniswapV2Pair contract and returns the address of the token that is not Wrapped Ether, along with a boolean value indicating whether or not the pair is valid.
+
+getTokenInfo: This function takes in the address of a token and returns a TokenInfo struct containing its name, symbol, decimals, and total supply.
+
+getPairAddress: This function takes in the addresses of two tokens and returns the address of the UniswapV2Pair contract that allows for trading between them.
