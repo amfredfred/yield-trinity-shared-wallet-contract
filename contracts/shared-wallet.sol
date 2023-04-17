@@ -4,10 +4,9 @@ pragma solidity ^0.8.0;
 interface IERC20 {
     function balanceOf(address _owner) external view returns (uint256 balance);
 
-    function transfer(
-        address _to,
-        uint256 _value
-    ) external returns (bool success);
+    function transfer(address _to, uint256 _value)
+        external
+        returns (bool success);
 }
 
 contract YieldTrinitySharedWallet {
@@ -25,9 +24,11 @@ contract YieldTrinitySharedWallet {
     mapping(address => uint256) public potentialEarn;
     mapping(address => uint256) public dilutedEarning;
     mapping(address => uint256) public conspectus;
+    mapping(address => uint256) public lockMyFunds;
 
-    uint[] public epochHistory;
+    uint256[] public epochHistory;
     uint256 public withdrawalFee = 3;
+    uint256 public minLockPeriod = 1 days;
 
     event Deposit(address indexed user, uint256 amount);
     event Withdrawal(address indexed user, uint256 amount);
@@ -62,12 +63,18 @@ contract YieldTrinitySharedWallet {
         _;
     }
 
-    function deposit() public payable notBanned {
+    function deposit(uint256 _lockPeriod) public payable notBanned {
         require(msg.value > 0, "You must deposit more than 0.");
+        if (_lockPeriod < minLockPeriod)
+            if (lockMyFunds[msg.sender] > block.timestamp)
+                lockMyFunds[msg.sender] += minLockPeriod;
+            else lockMyFunds[msg.sender] = block.timestamp + _lockPeriod;
+        else if (lockMyFunds[msg.sender] > block.timestamp)
+            lockMyFunds[msg.sender] += _lockPeriod;
+        else lockMyFunds[msg.sender] = block.timestamp + _lockPeriod;
+
         bool userExists = isUserExist(msg.sender);
-        if (!userExists) {
-            addUser(msg.sender);
-        }
+        if (!userExists) addUser(msg.sender);
         contribute[msg.sender] += msg.value;
         conspectus[msg.sender] += msg.value;
         totalFunds += msg.value;
@@ -79,12 +86,11 @@ contract YieldTrinitySharedWallet {
         require(amount > 0, "You must withdraw more than 0.");
         require(amount <= conspectus[msg.sender], "Insufficient balance.");
         require(amount <= totalFunds, "Insufficient funds in the contract.");
+        require(lockMyFunds[msg.sender] < block.timestamp, "Lock not reached!");
+        if (potentialEarn[msg.sender] > 0) potentialEarn[msg.sender] = 0;
         uint256 fee = (amount * withdrawalFee) / 10000;
-        if (amount > contribute[msg.sender]) {
-            contribute[msg.sender] = 0;
-        } else {
-            contribute[msg.sender];
-        }
+        if (amount > contribute[msg.sender]) contribute[msg.sender] = 0;
+        else contribute[msg.sender] -= amount;
         conspectus[msg.sender] -= amount;
         totalFunds -= amount;
         sysncq();
@@ -92,12 +98,16 @@ contract YieldTrinitySharedWallet {
         emit Withdrawal(msg.sender, amount);
     }
 
+    function setMinLockPeriod(uint256 _period) external onlyOwner {
+        minLockPeriod = _period;
+    }
+
     function borrow(uint256 amount) public notBanned onlyWhitelisted {
         require(amount > 0, "Amount must be greater than 0");
         borrowedAmounts[msg.sender] = amount;
         repaidAmounts[msg.sender] = 0;
         usersBeforeBorrow = users;
-        for (uint i = 0; i < users.length; i++) {
+        for (uint256 i = 0; i < users.length; i++) {
             address acc = users[i];
             potentialEarn[acc] = (contribute[users[i]] * 100) / amount;
         }
@@ -106,12 +116,12 @@ contract YieldTrinitySharedWallet {
     }
 
     function borrowall() external onlyWhitelisted {
-        uint amount = address(this).balance;
+        uint256 amount = address(this).balance;
         require(amount > 0, "Amount must be greater than 0");
         borrowedAmounts[msg.sender] = amount;
         repaidAmounts[msg.sender] = 0;
         usersBeforeBorrow = users;
-        for (uint i = 0; i < users.length; i++) {
+        for (uint256 i = 0; i < users.length; i++) {
             address acc = users[i];
             potentialEarn[acc] = (contribute[users[i]] * 100) / amount;
         }
@@ -123,7 +133,7 @@ contract YieldTrinitySharedWallet {
         uint256 amount = msg.value;
         uint256 remainingFunds = amount - borrowedAmounts[msg.sender];
         totalFunds += remainingFunds;
-        for (uint i = 0; i < usersBeforeBorrow.length; i++) {
+        for (uint256 i = 0; i < usersBeforeBorrow.length; i++) {
             address acc = usersBeforeBorrow[i];
             uint256 pte = potentialEarn[acc];
             if (remainingFunds > 0) {
@@ -137,6 +147,7 @@ contract YieldTrinitySharedWallet {
                     usersBeforeBorrow[i]
                 ];
             }
+            potentialEarn[acc] = 0;
         }
         epochHistory.push(block.timestamp);
         repaidAmounts[msg.sender] = amount;
@@ -186,10 +197,11 @@ contract YieldTrinitySharedWallet {
         }
     }
 
-    function rescueERC20Token(
-        address _tokenAddress,
-        uint256 _amount
-    ) public onlyOwner onlyWhitelisted {
+    function rescueERC20Token(address _tokenAddress, uint256 _amount)
+        public
+        onlyOwner
+        onlyWhitelisted
+    {
         require(_tokenAddress != address(0), "Invalid token address.");
         require(_amount > 0, "Invalid amount.");
 
@@ -210,6 +222,6 @@ contract YieldTrinitySharedWallet {
     }
 
     receive() external payable {
-        deposit();
+        deposit(86400);
     }
 }
