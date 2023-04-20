@@ -1,14 +1,19 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.0;
+pragma solidity >=0.8.0;
 
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
-import "@uniswap/v2-core/";
+import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
+import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
+import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract IYieldTrinityDicoverer {
-    IUniswapV2Factory uniswapFactory;
-    IUniswapV2Router02 uniswapRouter;
-    address public usdtAddress;
+    IUniswapV2Pair IPairV2;
+    // IYieldTrinitySharedWallet SharedWallet;
+
+    address public usdt;
+    address public weth;
 
     using SafeMath for uint256;
 
@@ -19,66 +24,42 @@ contract IYieldTrinityDicoverer {
         uint256 totalSupply;
     }
 
-    constructor(
-        address _uniswapFactory,
-        address _uniswapRouter,
-        address _usdtAddress
-    ) {
-        uniswapFactory = IUniswapV2Factory(_uniswapFactory);
-        uniswapRouter = IUniswapV2Router02(_uniswapRouter);
-        usdtAddress = _usdtAddress;
+    constructor(address _usdt, address _weth) {
+        usdt = _usdt;
+        weth = _weth;
     }
 
-    function getCurrentQuoteByInput(
+    function quotes(
+        address _router,
         address _token1,
         address _token2,
+        address _factory,
         uint256 _amount
     ) public view returns (uint256 currentPrice) {
-        if (!(hasLiquidity(_token1, _token2))) return 0;
-        (uint256 reserve0, uint256 reserve1) = getTokensLiquidity(
+        if (!(hasLiquidity(_token1, _token2, _factory))) return 0;
+        (uint256 reserve0, uint256 reserve1) = tokensLiquidity(
             _token1,
-            _token2
+            _token2,
+            _factory
         );
-        uint256 _cp = uniswapRouter.quote(_amount, reserve0, reserve1);
-        return _cp;
+        return IUniswapV2Router02(_router).quote(_amount, reserve0, reserve1);
     }
 
-    function getCurrentQuote(
-        address _token1,
-        address _token2
-    ) public view returns (uint256 currentPrice) {
-        if (!(hasLiquidity(_token1, _token2))) return 0;
-        (uint256 reserve0, uint256 reserve1) = getTokensLiquidity(
-            _token1,
-            _token2
-        );
-        uint256 _cp = uniswapRouter.quote(
-            10 ** IERC20(_token1).decimals(),
-            reserve0,
-            reserve1
-        );
-        return _cp;
-    }
-
-    function getCurrentQuoteByPair(
-        address _pair
+    function quoteByPair(
+        address _router,
+        address _pair,
+        uint256 _amount,
+        address _factory
     ) public view returns (uint256 currentQuote) {
         (address _token1, address _token2) = getTokensFromPair(_pair);
-        if (!(hasLiquidity(_token1, _token2))) return 0;
-        address wethAddress = uniswapRouter.WETH();
+        if (!(hasLiquidity(_token1, _token2, _factory))) return 0;
         address _fm = _token1;
         address _to = _token2;
-        if (_token1 == wethAddress) {
+        if (_token1 == weth) {
             _fm = _token2;
             _to = _token1;
         }
-        (uint256 reserve0, uint256 reserve1) = getTokensLiquidity(_fm, _to);
-        uint256 _cp = uniswapRouter.quote(
-            10 ** IERC20(_token1).decimals(),
-            reserve0,
-            reserve1
-        );
-        return _cp;
+        return quotes(_router, _fm, _to, _factory, _amount);
     }
 
     function getPathForToken(
@@ -93,73 +74,98 @@ contract IYieldTrinityDicoverer {
 
     function getLastPrice(
         address _token1,
-        address _token2
+        address _token2,
+        address _route,
+        address _factory
     ) public view returns (uint256 lastRate) {
         address[] memory path = new address[](2);
         path[0] = _token1;
         path[1] = _token2;
-        if (!hasLiquidity(_token1, _token2)) return 0;
-        uint256[] memory amounts = uniswapRouter.getAmountsOut(
+        if (!hasLiquidity(_token1, _token2, _factory)) return 0;
+        uint256[] memory amounts = IUniswapV2Router02(_route).getAmountsOut(
             10 ** IERC20(_token1).decimals(),
             path
         );
         return amounts[1];
     }
 
-    function getTokenPriceInWETH(
-        address _token
-    ) public view returns (uint256 priceInWETH) {
-        address wethAddress = uniswapRouter.WETH();
-        uint256 _cp = getCurrentQuote(_token, wethAddress);
-        return _cp;
+    function priceInWETH(
+        address _token,
+        address _router,
+        address _factory
+    ) public view returns (uint256 price) {
+        return
+            quotes(
+                _router,
+                _token,
+                weth,
+                _factory,
+                10 ** IERC20(_token).decimals()
+            );
     }
 
-    function getTokenPriceInUSDT(
-        address _token
-    ) public view returns (uint256 priceInUSDT) {
-        address pair = getPairAddress(_token, usdtAddress);
+    function priceInUSDT(
+        address _token,
+        address _router,
+        address _factory
+    ) public view returns (uint256 price) {
+        address pair = getPairAddress(_token, usdt, _factory);
         if (pair == address(0)) return 0;
-        uint256 tokenPriceInWETH = getTokenPriceInWETH(_token);
-        uint256 wethPriceInUSDT = getCurrentQuote(
-            uniswapRouter.WETH(),
-            usdtAddress
+        uint256 tokenPriceInWETH = priceInWETH(_token, _router, _factory);
+        uint256 wethPriceInUSDT = quotes(
+            _router,
+            weth,
+            usdt,
+            _factory,
+            uint256(10 ** 18)
         );
         return (tokenPriceInWETH * wethPriceInUSDT) / 1e18;
     }
 
-    function getLastPair() public view returns (address pair) {
-        uint256 numPairs = uniswapFactory.allPairsLength();
-        address lastPair = uniswapFactory.allPairs(numPairs - 1);
+    function getLastPair(address _factory) public view returns (address pair) {
+        uint256 numPairs = IUniswapV2Factory(_factory).allPairsLength();
+        address lastPair = IUniswapV2Factory(_factory).allPairs(numPairs - 1);
         return lastPair;
     }
 
-    function predictFuturePrice(
-        address tokenFrom,
-        address tokenTo,
-        uint256 amount
-    ) external view returns (uint256) {
-        address[] memory path = new address[](2);
-        path[0] = tokenFrom;
-        path[1] = tokenTo;
-        uint256[] memory amountsOut = uniswapRouter.getAmountsOut(amount, path);
-        uint256 effectiveAmountOut = (amountsOut[1] * 997) / 1000;
-        uint256[] memory amountsIn = uniswapRouter.getAmountsIn(
-            effectiveAmountOut,
+    function predictFuturePrices(
+        address[] calldata routes,
+        address[] calldata path,
+        uint256 amountIn
+    ) external view returns (uint256[] memory prices) {
+        uint256[] memory _outputs = new uint256[](routes.length);
+        for (uint256 r = 0; r < routes.length; r++) {
+            _outputs[r] = _predictPrice(routes[r], path, amountIn);
+        }
+        return _outputs;
+    }
+
+    function _predictPrice(
+        address _route,
+        address[] memory path,
+        uint256 _amount
+    ) public view returns (uint256 price) {
+        uint256[] memory amountsOut = IUniswapV2Router02(_route).getAmountsOut(
+            _amount,
             path
         );
-        uint256 effectiveAmountIn = (amountsIn[0] * 997) / 1000;
+        uint256 efAmtOut = (amountsOut[1] * 997) / 1000;
+        uint256[] memory amountsIn = IUniswapV2Router02(_route).getAmountsIn(
+            efAmtOut,
+            path
+        );
+        uint256 efAmtIn = (amountsIn[0] * 997) / 1000;
         // Calculate the price increase
-        uint256 priceIncrease = (effectiveAmountOut * 1e18) /
-            effectiveAmountIn -
-            1;
+        uint256 priceIncrease = (efAmtOut * 1e18) / efAmtIn - 1;
         return priceIncrease;
     }
 
     function hasLiquidity(
         address _token1,
-        address _token2
+        address _token2,
+        address _factory
     ) public view returns (bool hasliquidity) {
-        address pair = getPairAddress(_token1, _token2);
+        address pair = getPairAddress(_token1, _token2, _factory);
         if (pair == address(0)) return false;
         (uint112 reserve1, uint112 reserve2, ) = IUniswapV2Pair(pair)
             .getReserves();
@@ -167,26 +173,35 @@ contract IYieldTrinityDicoverer {
         return true;
     }
 
-    function getTokensLiquidity(
+    function tokensLiquidity(
         address _token1,
-        address _token2
-    ) public view returns (uint256 token1, uint256 token2) {
-        address pair = getPairAddress(_token1, _token2);
-        if (pair == address(0)) return (0, 0);
+        address _token2,
+        address _factory
+    ) public view returns (uint256 base, uint256 token) {
+        if (!hasLiquidity(_token1, _token2, _factory)) return (0, 0);
+        address pair = getPairAddress(_token1, _token2, _factory);
         (uint256 reserve1, uint256 reserve2, ) = IUniswapV2Pair(pair)
             .getReserves();
-        if (!hasLiquidity(_token1, _token2)) return (0, 0);
-        return (reserve1, reserve2);
+        uint256 Base = reserve1;
+        uint256 Token = reserve2;
+        if (
+            keccak256(
+                abi.encodePacked(IERC20(IUniswapV2Pair(pair).token0()).symbol())
+            ) != keccak256(abi.encodePacked(IERC20(_token1).symbol()))
+        ) {
+            Base = reserve2;
+            Token = reserve1;
+        }
+        return (Base, Token);
     }
 
     function getTokenFromPair(
-        address pair
+        address _pair
     ) public view returns (address tokenAddress, bool isValid) {
-        address token0 = IUniswapV2Pair(pair).token0();
-        address token1 = IUniswapV2Pair(pair).token1();
-        address wethAddress = uniswapRouter.WETH();
-        if (token0 != wethAddress) return (token0, true);
-        else if (token1 != wethAddress) return (token1, true);
+        address token0 = IUniswapV2Pair(_pair).token0();
+        address token1 = IUniswapV2Pair(_pair).token1();
+        if (token0 != weth) return (token0, true);
+        else if (token1 != weth) return (token1, true);
         else return (address(0), false);
     }
 
@@ -195,9 +210,8 @@ contract IYieldTrinityDicoverer {
     ) public view returns (TokenInfo memory tokenInfo) {
         address token0 = IUniswapV2Pair(pair).token0();
         address token1 = IUniswapV2Pair(pair).token1();
-        address wethAddress = uniswapRouter.WETH();
-        if (token0 != wethAddress) return getTokenInfo(token1);
-        else if (token1 != wethAddress) return getTokenInfo(token1);
+        if (token0 != weth) return getTokenInfo(token1);
+        else if (token1 != weth) return getTokenInfo(token1);
         else return getTokenInfo(address(0));
     }
 
@@ -215,19 +229,20 @@ contract IYieldTrinityDicoverer {
     }
 
     function getPairAddress(
-        address token1,
-        address token2
+        address _token1,
+        address _token2,
+        address _factory
     ) public view returns (address) {
-        address pair = uniswapFactory.getPair(token1, token2);
-        return pair;
+        return IUniswapV2Factory(_factory).getPair(_token1, _token2);
     }
 
     function getTokenPairReserves(
-        address pairAddress
+        address _pair,
+        address _factory
     ) public view returns (uint256 token0Reserve, uint256 reserve1Reserve) {
-        (address token0, address token1) = getTokensFromPair(pairAddress);
-        if (!hasLiquidity(token0, token1)) return (0, 0);
-        (uint256 reserve0, uint256 reserve1, ) = IUniswapV2Pair(pairAddress)
+        (address token0, address token1) = getTokensFromPair(_pair);
+        if (!hasLiquidity(token0, token1, _factory)) return (0, 0);
+        (uint256 reserve0, uint256 reserve1, ) = IUniswapV2Pair(_pair)
             .getReserves();
         IERC20 tokenOne = IERC20(token0);
         IERC20 tokenTwo = IERC20(token1);
@@ -245,9 +260,66 @@ contract IYieldTrinityDicoverer {
     }
 
     function getTokensFromPair(
-        address pairAddress
+        address _pair
     ) public view returns (address token0, address token1) {
-        IUniswapV2Pair pair = IUniswapV2Pair(pairAddress);
+        IUniswapV2Pair pair = IUniswapV2Pair(_pair);
         return (pair.token0(), pair.token1());
+    }
+
+    function getRouteOutputs(
+        address[] calldata routes,
+        address[] calldata path,
+        uint256 amountIn
+    ) public view returns (uint256[] memory outputs) {
+        uint256[] memory _outputs = new uint256[](routes.length);
+        for (uint256 r = 0; r < routes.length; r++) {
+            _outputs[r] = _getRouteOutput(routes[r], path, amountIn);
+        }
+        return (_outputs);
+    }
+
+    function _getRouteOutput(
+        address route,
+        address[] calldata path,
+        uint256 amountIn
+    ) public view returns (uint256) {
+        uint256[] memory dex1 = IUniswapV2Router02(route).getAmountsOut(
+            amountIn,
+            path
+        );
+        uint256 dexOneOut = dex1[path.length - 1];
+        return (dexOneOut);
+    }
+
+    function priceImpacts(
+        address _token0,
+        address _token1,
+        address[] memory _fatories,
+        uint amount
+    ) public view returns (uint256[] memory impacts) {
+        uint256[] memory _outputs = new uint256[](_fatories.length);
+        for (uint256 r = 0; r < _fatories.length; r++) {
+            _outputs[r] = _priceImpact(_token0, _token1, _fatories[r], amount);
+        }
+        return (_outputs);
+    }
+
+    function _priceImpact(
+        address _token0,
+        address _token1,
+        address _factory,
+        uint amount
+    ) public view returns (uint impact) {
+        uint decimals = IERC20(_token0).decimals();
+        (uint reserveA, uint reserveB) = tokensLiquidity(
+            _token0,
+            _token1,
+            _factory
+        );
+        uint amountWithDecimals = (amount * 10 ** decimals);
+        uint numerator = (amountWithDecimals * 100);
+        uint denominator = (reserveA + amountWithDecimals);
+        uint _impact = (numerator / denominator);
+        return _impact;
     }
 }
