@@ -89,6 +89,22 @@ contract IYieldTrinityDicoverer {
         return amounts[1];
     }
 
+    function priceInToken(
+        address _token0,
+        address _token1,
+        address _router,
+        address _factory
+    ) public view returns (uint256 price) {
+        return
+            quotes(
+                _router,
+                _token0,
+                _token1,
+                _factory,
+                10 ** IERC20(_token0).decimals()
+            );
+    }
+
     function priceInWETH(
         address _token,
         address _router,
@@ -295,7 +311,7 @@ contract IYieldTrinityDicoverer {
         address _token0,
         address _token1,
         address[] memory _fatories,
-        uint amount
+        uint256 amount
     ) public view returns (uint256[] memory impacts) {
         uint256[] memory _outputs = new uint256[](_fatories.length);
         for (uint256 r = 0; r < _fatories.length; r++) {
@@ -308,18 +324,38 @@ contract IYieldTrinityDicoverer {
         address _token0,
         address _token1,
         address _factory,
-        uint amount
-    ) public view returns (uint impact) {
-        uint decimals = IERC20(_token0).decimals();
-        (uint reserveA, uint reserveB) = tokensLiquidity(
+        uint256 amount
+    ) public view returns (uint256 impact) {
+        uint256 decimals = IERC20(_token0).decimals();
+        (uint256 reserveA, uint256 reserveB) = tokensLiquidity(
             _token0,
             _token1,
             _factory
         );
-        uint amountWithDecimals = (amount * 10 ** decimals);
-        uint numerator = (amountWithDecimals * 100);
-        uint denominator = (reserveA + amountWithDecimals);
-        uint _impact = (numerator / denominator);
+        uint256 amountWithDecimals = (amount * 10 ** decimals);
+        uint256 numerator = (amountWithDecimals * 100);
+        uint256 denominator = (reserveA + amountWithDecimals);
+        uint256 _impact = (numerator / denominator);
         return _impact;
+    }
+
+    function swap(
+        address[] calldata _path,
+        uint256 _amountIn,
+        uint256 _minAmountOut,
+        address _router
+    ) public payable {
+        uint256[] memory amounts = IUniswapV2Router02(_router)
+            .swapExactTokensForTokens(
+                _amountIn,
+                _minAmountOut,
+                _path,
+                address(this),
+                block.timestamp
+            );
+        uint256 outputAmount = amounts[amounts.length - 1];
+        require(outputAmount >= _minAmountOut, "Minoutput Insufficient");
+        // Transfer the tokens to the initiator
+        IERC20(_path[_path.length - 1]).transfer(msg.sender, outputAmount);
     }
 }
