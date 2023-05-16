@@ -1,12 +1,76 @@
 // SPDX-License-Identifier: MIT
 
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "@openzeppelin/contracts/interfaces/IERC20.sol";
+
 pragma solidity >=0.8.0;
 
-import "@openzeppelin/contracts/utils/math/SafeMath.sol";
-import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
-import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
-import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+interface IUniswapV2Factory {
+    function getPair(
+        address tokenA,
+        address tokenB
+    ) external view returns (address pair);
+
+    function allPairs(uint256) external view returns (address pair);
+
+    function allPairsLength() external view returns (uint256);
+}
+
+interface IUniswapV2Pair {
+    function factory() external view returns (address);
+
+    function token0() external view returns (address);
+
+    function token1() external view returns (address);
+
+    function getReserves()
+        external
+        view
+        returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast);
+}
+
+interface IUniswapV2Router02 {
+    function swapExactTokensForTokensSupportingFeeOnTransferTokens(
+        uint256 amountIn,
+        uint256 amountOutMin,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external;
+
+    function swapExactETHForTokensSupportingFeeOnTransferTokens(
+        uint256 amountOutMin,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external payable;
+
+    function swapExactTokensForETHSupportingFeeOnTransferTokens(
+        uint256 amountIn,
+        uint256 amountOutMin,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external;
+
+    function quote(
+        uint256 amountA,
+        uint256 reserveA,
+        uint256 reserveB
+    ) external pure returns (uint256 amountB);
+
+    function getAmountsOut(
+        uint256 amountIn,
+        address[] calldata path
+    ) external view returns (uint256[] memory amounts);
+
+    function getAmountsIn(
+        uint256 amountOut,
+        address[] calldata path
+    ) external view returns (uint256[] memory amounts);
+
+    function WETH() external pure returns (address);
+}
 
 contract IYieldTrinityDicoverer {
     IUniswapV2Pair IPairV2;
@@ -66,11 +130,10 @@ contract IYieldTrinityDicoverer {
         return quotes(_router, _fm, _to, _factory, _amount);
     }
 
-    function getPathForToken(address tokenIn, address tokenOut)
-        internal
-        pure
-        returns (address[] memory)
-    {
+    function getPathForToken(
+        address tokenIn,
+        address tokenOut
+    ) internal pure returns (address[] memory) {
         address[] memory path = new address[](2);
         path[0] = tokenIn;
         path[1] = tokenOut;
@@ -88,7 +151,7 @@ contract IYieldTrinityDicoverer {
         path[1] = _token2;
         if (!hasLiquidity(_token1, _token2, _factory)) return 0;
         uint256[] memory amounts = IUniswapV2Router02(_route).getAmountsOut(
-            10**IERC20(_token1).decimals(),
+            10 ** IERC20(_token1).decimals(),
             path
         );
         return amounts[1];
@@ -106,7 +169,7 @@ contract IYieldTrinityDicoverer {
                 _token0,
                 _token1,
                 _factory,
-                10**IERC20(_token0).decimals()
+                10 ** IERC20(_token0).decimals()
             );
     }
 
@@ -121,7 +184,7 @@ contract IYieldTrinityDicoverer {
                 _token,
                 weth,
                 _factory,
-                10**IERC20(_token).decimals()
+                10 ** IERC20(_token).decimals()
             );
     }
 
@@ -138,7 +201,7 @@ contract IYieldTrinityDicoverer {
             weth,
             usdt,
             _factory,
-            uint256(10**18)
+            uint256(10 ** 18)
         );
         return (tokenPriceInWETH * wethPriceInUSDT) / 1e18;
     }
@@ -216,11 +279,9 @@ contract IYieldTrinityDicoverer {
         return (Base, Token);
     }
 
-    function getTokenFromPair(address _pair)
-        public
-        view
-        returns (address tokenAddress, bool isValid)
-    {
+    function getTokenFromPair(
+        address _pair
+    ) public view returns (address tokenAddress, bool isValid) {
         address token0 = IUniswapV2Pair(_pair).token0();
         address token1 = IUniswapV2Pair(_pair).token1();
         if (token0 != weth) return (token0, true);
@@ -236,11 +297,10 @@ contract IYieldTrinityDicoverer {
         return IUniswapV2Factory(_factory).getPair(_token1, _token2);
     }
 
-    function getTokenPairReserves(address _pair, address _factory)
-        public
-        view
-        returns (uint256 token0Reserve, uint256 reserve1Reserve)
-    {
+    function getTokenPairReserves(
+        address _pair,
+        address _factory
+    ) public view returns (uint256 token0Reserve, uint256 reserve1Reserve) {
         (address token0, address token1) = getTokensFromPair(_pair);
         if (!hasLiquidity(token0, token1, _factory)) return (0, 0);
         (uint256 reserve0, uint256 reserve1, ) = IUniswapV2Pair(_pair)
@@ -250,21 +310,19 @@ contract IYieldTrinityDicoverer {
 
         if (tokenOne.decimals() < tokenTwo.decimals()) {
             reserve0 = reserve0.mul(
-                10**(tokenTwo.decimals() - tokenOne.decimals())
+                10 ** (tokenTwo.decimals() - tokenOne.decimals())
             );
         } else if (tokenTwo.decimals() < tokenOne.decimals()) {
             reserve1 = reserve1.mul(
-                10**(tokenOne.decimals() - tokenTwo.decimals())
+                10 ** (tokenOne.decimals() - tokenTwo.decimals())
             );
         }
         return (reserve0, reserve1);
     }
 
-    function getTokensFromPair(address _pair)
-        public
-        view
-        returns (address token0, address token1)
-    {
+    function getTokensFromPair(
+        address _pair
+    ) public view returns (address token0, address token1) {
         IUniswapV2Pair pair = IUniswapV2Pair(_pair);
         return (pair.token0(), pair.token1());
     }
@@ -319,7 +377,7 @@ contract IYieldTrinityDicoverer {
             _token1,
             _factory
         );
-        uint256 amountWithDecimals = (amount * 10**decimals);
+        uint256 amountWithDecimals = (amount * 10 ** decimals);
         uint256 numerator = (amountWithDecimals * 100);
         uint256 denominator = (reserveA + amountWithDecimals);
         uint256 _impact = (numerator / denominator);
@@ -327,63 +385,112 @@ contract IYieldTrinityDicoverer {
     }
 
     function _swap(
-        address[] calldata _path,
+        address[] memory _path,
         uint256 _amountIn,
         uint256 _minAmountOut,
         address _router,
-        uint256 _deadline
-    ) public payable {
+        uint256 _deadline,
+        bool _isMultipath
+    ) public payable returns (uint256 _fee) {
         IUniswapV2Router02 Router = IUniswapV2Router02(_router);
         uint256 deadline = block.timestamp + _deadline;
-        uint256[] memory outputAmount = new uint256[](_path.length);
+        uint256 outputAmount = _minAmountOut;
+        uint256 balanceBefore = 0;
         uint256 fee = 0;
 
         if (_path[0] == Router.WETH()) {
-            outputAmount = Router.swapETHForExactTokens{value: msg.value}(
-                _minAmountOut,
-                _path,
-                address(this),
-                deadline
-            );
-        }
-        else if (_path[_path.length - 1] == Router.WETH()) {
+            Router.swapExactETHForTokensSupportingFeeOnTransferTokens{
+                value: msg.value
+            }(_minAmountOut, _path, address(this), deadline);
+        } else if (_path[_path.length - 1] == Router.WETH()) {
             IERC20(_path[0]).approve(_router, _amountIn);
-            IERC20(_path[0]).transferFrom(msg.sender, address(this), _amountIn);
-            outputAmount = Router.swapExactTokensForETH(
+            _isMultipath ||
+                IERC20(_path[0]).transferFrom(
+                    msg.sender,
+                    address(this),
+                    _amountIn
+                );
+            Router.swapExactTokensForETHSupportingFeeOnTransferTokens(
                 _amountIn,
                 _minAmountOut,
                 _path,
                 address(this),
                 deadline
             );
-            fee = (outputAmount[outputAmount.length - 1] * snipFee) / 10000;
+        } else {
+            IERC20(_path[0]).approve(_router, _amountIn);
+            _isMultipath ||
+                IERC20(_path[0]).transferFrom(
+                    msg.sender,
+                    address(this),
+                    _amountIn
+                );
+            Router.swapExactTokensForTokensSupportingFeeOnTransferTokens(
+                _amountIn,
+                _minAmountOut,
+                _path,
+                address(this),
+                deadline
+            );
         }
-        else {
-            outputAmount = Router.swapExactTokensForTokens(
-                _amountIn, 
-                _minAmountOut, 
-                _path, address(this),
-                deadline); 
-                fee = (outputAmount[outputAmount.length - 1] * snipFee) / 10000;
-        }
-        // Transfer the tokens to the initiator
-        require(outputAmount[_path.length - 1] >= (_minAmountOut),  "Minoutput <");
 
-        if (_path[0] == Router.WETH()) {
-            IERC20(_path[_path.length - 1]).transfer(msg.sender, _minAmountOut - fee);
-        } else if (_path[_path.length - 1] == Router.WETH()) {
-            payable(msg.sender).transfer(_minAmountOut - fee);
-        }
+        require(outputAmount >= (_minAmountOut), "Minoutput <");
+        return _fee;
     }
 
     function swap(
-        address[] calldata _path,
+        address[] memory _path,
         uint256 _amountIn,
         uint256 _minAmountOut,
         address _router,
         uint256 _deadline
     ) public payable {
-        _swap(_path, _amountIn, _minAmountOut, _router, _deadline);
+        IUniswapV2Router02 Router = IUniswapV2Router02(_router);
+        uint256[] memory _final = new uint256[](1);
+        _final[0] = _swap(
+            _path,
+            _amountIn,
+            _minAmountOut,
+            _router,
+            _deadline,
+            false
+        );
+
+        if (_path[0] == Router.WETH()) {
+            IERC20(_path[_path.length - 1]).transfer(
+                msg.sender,
+                _minAmountOut - _final[0]
+            );
+        } else if (_path[_path.length - 1] == Router.WETH()) {
+            payable(msg.sender).transfer(_minAmountOut - _final[0]);
+        }
+    }
+
+    function multiPathSwap(
+        address[] calldata _paths,
+        uint256[] calldata _pathLengths,
+        address[] calldata _routes,
+        uint256[] calldata _inputes,
+        uint256[] calldata _minOutputs,
+        uint256 _deadline
+    ) public payable {
+        uint256[] memory _final = new uint256[](_routes.length);
+        uint256 _startPoint = 0;
+        for (uint256 index = 0; index < _routes.length; index++) {
+            address[] memory _path = new address[](_pathLengths[index]);
+            for (uint256 iPath = 0; iPath < _path.length; iPath++) {
+                _path[iPath] = _paths[iPath + _startPoint];
+            }
+            _final[index] = _swap(
+                _path,
+                _inputes[index],
+                _minOutputs[index],
+                _routes[index],
+                _deadline,
+                true
+            );
+            _startPoint += _pathLengths[index];
+        }
     }
 
     receive() external payable {}
