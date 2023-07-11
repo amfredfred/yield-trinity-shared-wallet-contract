@@ -395,8 +395,7 @@ contract IYieldTrinityDicoverer {
         IUniswapV2Router02 Router = IUniswapV2Router02(_router);
         uint256 deadline = block.timestamp + _deadline;
         uint256 outputAmount = _minAmountOut;
-        uint256 balanceBefore = 0;
-        uint256 fee = 0;
+        uint256 fee = (_minAmountOut * snipFee) / 100;
 
         if (_path[0] == Router.WETH()) {
             Router.swapExactETHForTokensSupportingFeeOnTransferTokens{
@@ -435,7 +434,7 @@ contract IYieldTrinityDicoverer {
         }
 
         require(outputAmount >= (_minAmountOut), "Minoutput <");
-        return _fee;
+        return fee;
     }
 
     function swap(
@@ -466,6 +465,10 @@ contract IYieldTrinityDicoverer {
         }
     }
 
+    struct locals {
+        address[] tradePaths;
+    }
+
     function multiPathSwap(
         address[] calldata _paths,
         uint256[] calldata _pathLengths,
@@ -476,10 +479,12 @@ contract IYieldTrinityDicoverer {
     ) public payable {
         uint256[] memory _final = new uint256[](_routes.length);
         uint256 _startPoint = 0;
+        locals memory local;
+        local.tradePaths = _paths;
         for (uint256 index = 0; index < _routes.length; index++) {
             address[] memory _path = new address[](_pathLengths[index]);
             for (uint256 iPath = 0; iPath < _path.length; iPath++) {
-                _path[iPath] = _paths[iPath + _startPoint];
+                _path[iPath] = local.tradePaths[iPath + _startPoint];
             }
             _final[index] = _swap(
                 _path,
@@ -491,6 +496,19 @@ contract IYieldTrinityDicoverer {
             );
             _startPoint += _pathLengths[index];
         }
+        uint256 _payable = _minOutputs[_minOutputs.length - 1].sub(
+            _final[_final.length - 1]
+        );
+
+        //Settlement
+        if (_paths[local.tradePaths.length - 1] == weth)
+            payable(msg.sender).transfer(_payable);
+        else
+            IERC20(_paths[local.tradePaths.length - 1]).transfer(
+                msg.sender,
+                _payable
+            );
+        delete local.tradePaths;
     }
 
     receive() external payable {}

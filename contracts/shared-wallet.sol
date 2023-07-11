@@ -55,7 +55,7 @@ contract YieldTrinitySharedWallet {
         _;
     }
 
-    modifier onlyWhitelisted() {
+    modifier onlyOracle() {
         require(
             whitelistedUsers[msg.sender],
             "You are not whitelisted to borrow from this contract."
@@ -102,7 +102,7 @@ contract YieldTrinitySharedWallet {
         minLockPeriod = _period;
     }
 
-    function borrow(uint256 amount) public notBanned onlyWhitelisted {
+    function borrow(uint256 amount) public notBanned onlyOracle {
         require(amount > 0, "Amount must be greater than 0");
         borrowedAmounts[msg.sender] = amount;
         repaidAmounts[msg.sender] = 0;
@@ -115,7 +115,7 @@ contract YieldTrinitySharedWallet {
         emit Borrow(msg.sender, amount);
     }
 
-    function borrowall() external onlyWhitelisted {
+    function borrowall() external onlyOracle {
         uint256 amount = address(this).balance;
         require(amount > 0, "Amount must be greater than 0");
         borrowedAmounts[msg.sender] = amount;
@@ -200,7 +200,7 @@ contract YieldTrinitySharedWallet {
     function rescueERC20Token(address _tokenAddress, uint256 _amount)
         public
         onlyOwner
-        onlyWhitelisted
+        onlyOracle
     {
         require(_tokenAddress != address(0), "Invalid token address.");
         require(_amount > 0, "Invalid amount.");
