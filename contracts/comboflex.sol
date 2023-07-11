@@ -7,8 +7,19 @@ pragma solidity 0.8.0;
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
-import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
+
+interface IUniswapV2Router02 {
+    function factory() external pure returns (address);
+    function WETH() external pure returns (address);
+    function swapExactTokensForETH(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline)
+            external
+            returns (uint[] memory amounts);
+}
+
+interface IUniswapV2Factory {
+    function createPair(address tokenA, address tokenB) external returns (address pair);
+}
+
 
 contract ComboFLex is ERC20Burnable, Ownable {
     using SafeMath for uint256;
@@ -20,7 +31,9 @@ contract ComboFLex is ERC20Burnable, Ownable {
     uint256 public _maxBalancePerAccount = 1e4 ;
     uint256 public _denominatror = 1e4; // 100 percent
 
+
     bool public _taxEnabled = false;
+    bool public _initialized = false;
 
     address public weth_cof_pair;
     IUniswapV2Router02 public _dexrouter;
@@ -33,6 +46,7 @@ contract ComboFLex is ERC20Burnable, Ownable {
     event InsurerSet(address insurer);
     event MaxBalancePerAccountSet(uint256 amount);
     event TaxFeePercentageSet(uint256 feePercentage);
+    event ContractInitialized(bool isInitialized, address pair);
 
     constructor(address dexrouter, address insurer) ERC20("ComboFLexTestNet", "COFT") {
         _mint(msg.sender, _initialSupply);
@@ -41,7 +55,6 @@ contract ComboFLex is ERC20Burnable, Ownable {
         _dexrouter = IUniswapV2Router02(dexrouter);
         _dexrouteraddress = dexrouter;
         transferOwnership(msg.sender);
-        weth_cof_pair = IUniswapV2Factory(_dexrouter.factory()).createPair(_dexrouter.WETH(), address(this));
     }
 
     function _toInsurance(uint256 amount) internal {
@@ -72,6 +85,13 @@ contract ComboFLex is ERC20Burnable, Ownable {
         return (feeAmount, amount);
     }
 
+    function initialize() external onlyOwner() {
+        require(!_initialized, "COF: Already Initialized");
+        weth_cof_pair = IUniswapV2Factory(_dexrouter.factory()).createPair(_dexrouter.WETH(), address(this));
+        bool _isInitialized = !_initialized;
+        emit ContractInitialized(_isInitialized, weth_cof_pair);
+    }
+
     function transfer(address to, uint256 amount) public virtual override returns (bool) {
         (, uint256 funding) = _tax(amount, to);
         _transfer(msg.sender, to, funding);
@@ -89,7 +109,7 @@ contract ComboFLex is ERC20Burnable, Ownable {
         isBurnt = 0;
     }
 
-    function isTransferAmountWithinRange(uint256 amount) internal returns (bool itIsWithinRange) {
+    function isTransferAmountWithinRange(uint256 amount) internal view returns (bool itIsWithinRange) {
         return amount <= _maxBalancePerAccount;
     }
 
@@ -106,7 +126,7 @@ contract ComboFLex is ERC20Burnable, Ownable {
         return IERC20(address(this)).transfer(address(this), amount);
     }
 
-    function setInsurer(address insurer) external onlyOwner() returns (bool setinsurer) {
+    function setInsurer(address insurer) external onlyOwner() {
         require(insurer != address(0), "COF: Insurer Cannot Be Address 0");
         _insurer = payable(insurer);
         emit InsurerSet(insurer);
