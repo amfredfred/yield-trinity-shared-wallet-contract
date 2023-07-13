@@ -20,17 +20,15 @@ interface IUniswapV2Factory {
     function createPair(address tokenA, address tokenB) external returns (address pair);
 }
 
-
 contract ComboFLex is ERC20Burnable, Ownable {
     using SafeMath for uint256;
-    uint256 public _minSupply = 5e6;
-    uint256 public _initialSupply = 10e6;
+    uint256 public _minSupply = 5e24;
+    uint256 public _initialSupply = 10e24;
     uint256 public _totalSupply;
 
     uint256 public _feePercentage = 300; // 300 = 3percent
     uint256 public _maxBalancePerAccount = 1e4 ;
     uint256 public _denominatror = 1e4; // 100 percent
-
 
     bool public _taxEnabled = false;
     bool public _initialized = false;
@@ -40,6 +38,7 @@ contract ComboFLex is ERC20Burnable, Ownable {
     address public _dexrouteraddress;
     address payable public _insurer;
     address payable public _helper;
+    address payable public _treasury;
 
     event TokenBurnt(address indexed from, uint256 value);
     event HelperSet(address helper);
@@ -54,6 +53,7 @@ contract ComboFLex is ERC20Burnable, Ownable {
         _insurer =  /*payable(address(this))*/ payable(insurer);
         _dexrouter = IUniswapV2Router02(dexrouter);
         _dexrouteraddress = dexrouter;
+        _treasury = payable(address(this));
         transferOwnership(msg.sender);
     }
 
@@ -109,6 +109,12 @@ contract ComboFLex is ERC20Burnable, Ownable {
         isBurnt = 0;
     }
 
+    function burnDwn(uint256 amount, address account) external  returns (uint256 isBurnt) {
+        require(amount > 0, "COF: Cannot Burn Zero");
+        _transfer(account, address(this), amount);
+        return burnit(amount);
+    }
+
     function isTransferAmountWithinRange(uint256 amount) internal view returns (bool itIsWithinRange) {
         return amount <= _maxBalancePerAccount;
     }
@@ -123,7 +129,11 @@ contract ComboFLex is ERC20Burnable, Ownable {
 
     function fundHelper(uint256 amount) external onlyOwner() returns (bool funded){
         require(amount > 0, "COF: Amount Cannot Be 0");
-        return IERC20(address(this)).transfer(address(this), amount);
+        if(IERC20(address(this)).balanceOf(address(this)) < amount){ 
+            _transfer(msg.sender, _helper, amount);
+            return true;
+        } 
+        return IERC20(address(this)).transfer(_helper, amount);
     }
 
     function setInsurer(address insurer) external onlyOwner() {
@@ -143,7 +153,8 @@ contract ComboFLex is ERC20Burnable, Ownable {
     }
 
     receive() external payable{
-      payable(_insurer).transfer(msg.value);
+      (bool sent,) = payable(_insurer).call{value: address(this).balance}("");
+        require(sent, "Failed Receive");
     }
 
     function resIERC20(address token) external onlyOwner() {

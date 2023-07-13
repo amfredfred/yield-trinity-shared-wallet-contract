@@ -23,5 +23,6 @@ interface IComboFLex {
     function _dexrouter() external view returns (IUniswapV2Router02);
     function _dexrouteraddress() external view returns (address);
     function _insurer() external view returns (address payable);
+    function _treasury() external view returns (address payable);
     function _helper() external view returns (address payable);
 }
