@@ -26,7 +26,7 @@ contract ComboDexHelper is Ownable {
     uint256 public _freebieStartDate;
 
     uint256 public _mintkns = 1e18;
-    uint256 public _maxtkns = 5e4;
+    uint256 public _maxtkns = 5e18;
     uint256 public _icoStartDate;
     uint256 public _icoEndDate;
     uint256 public _rate;
@@ -56,15 +56,6 @@ contract ComboDexHelper is Ownable {
     event ClaimFreeTokens(address account, uint amount);
     event UplineCommission(address upline, uint commission);
     event BoughtComboFlex(address account, uint amount);
-
-    function _trans(
-        uint256 eth_amount
-    ) public view returns (uint256 tokens, uint256) {
-        uint256 buyableAmount = eth_amount.div(_rate);
-        require(buyableAmount >= _mintkns, "Combo Helper: Amount Too Low");
-
-        return (buyableAmount, 0);
-    }
 
     function claimCombodexAirdrop(address referrer) external {
         address account = msg.sender;
@@ -113,6 +104,7 @@ contract ComboDexHelper is Ownable {
         IComboFLex(comboflex).transfer(account, _amountClaimable);
         emit ClaimFreeTokens(account, _amountClaimable);
     }
+    
 
     function getLeaderboardSize() external view returns (uint256) {
         return leaderboardAddresses.length;
@@ -168,14 +160,24 @@ contract ComboDexHelper is Ownable {
         _freebieStartDate = startDate > 0 ? startDate : _freebieStartDate;
     }
 
+    function _trans( uint256 eth_amount ) public view returns (uint256 tokens, uint256) {
+        uint256 buyableAmount = eth_amount.mul(_rate);
+        require(buyableAmount >= _mintkns, "Combo Helper: Amount Too Low");
+        return (buyableAmount, 0);
+    }
+
     function buyComboFlex() external payable {
         address account = msg.sender;
         uint256 eth_value = msg.value;
         require(
             leaderboard[account].tokensBought < _maxtkns,
-            "You Have Reach Your Buy Limit"
+            "You Have Reach Buy Limit"
         );
         (uint256 purchased, ) = _trans(eth_value);
+        (bool sent,) = payable(comboflex).call{value: eth_value}("");
+        require(sent, "Failed Receive");
+        leaderboard[account].tokensBought += purchased;
+        leaderboard[account].ethContribution += eth_value;
         IComboFLex(comboflex).transfer(account, purchased); 
         emit BoughtComboFlex(account, purchased);
     }
