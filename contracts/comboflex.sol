@@ -127,10 +127,10 @@ contract ComboFLex is ERC20Burnable, Ownable {
         );
         uint256 burnAmount = amount;
         if (_totalSupply.sub(burnAmount) < _minSupply) {
-            burnAmount = _totalSupply.sub(_minSupply);
-            _totalSupply = _minSupply;
+             burnAmount = _totalSupply.sub(_minSupply);
+            _burn(address(this), 1);
         } else {
-            _totalSupply = _totalSupply.sub(burnAmount);
+            _burn(address(this), burnAmount);
         }
         emit TokenBurnt(msg.sender, burnAmount);
         return burnAmount;
